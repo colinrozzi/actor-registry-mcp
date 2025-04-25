@@ -677,4 +677,13 @@ bindings::export!(Component with_types_in bindings);
     );
 }
 "#;
+    pub(crate) const BASIC_WIT: &str = r#"package ntwk:theater;
+
+world {{actor_name}} {
+    import runtime;
+
+    export message-server-client;
+    export actor;
+}
+"#;
 }
