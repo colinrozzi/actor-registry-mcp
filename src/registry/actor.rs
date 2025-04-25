@@ -61,6 +61,17 @@ pub enum BuildStatus {
     Failed,
 }
 
+impl std::fmt::Display for BuildStatus {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            BuildStatus::NotBuilt => write!(f, "Not Built"),
+            BuildStatus::Building => write!(f, "Building"),
+            BuildStatus::Success => write!(f, "Success"),
+            BuildStatus::Failed => write!(f, "Failed"),
+        }
+    }
+}
+
 impl Default for BuildInfo {
     fn default() -> Self {
         Self {

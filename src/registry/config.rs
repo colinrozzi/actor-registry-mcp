@@ -22,7 +22,7 @@ impl Default for RegistryConfig {
 
 impl RegistryConfig {
     pub fn load<P: AsRef<Path>>(path: P) -> Result<Self> {
-        let content = fs::read_to_string(path)
+        let content = fs::read_to_string(&path)
             .with_context(|| format!("Failed to read config from {:?}", path.as_ref()))?;
         
         let config: Self = toml::from_str(&content)

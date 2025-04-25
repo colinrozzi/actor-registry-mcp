@@ -7,8 +7,8 @@ use crate::bindings::exports::ntwk::theater::message_server_client::Guest as Mes
 use crate::bindings::ntwk::theater::runtime::log;
 use crate::bindings::ntwk::theater::types::State;
 
-struct {{actor_name}};
-impl Guest for {{actor_name}} {
+struct Component;
+impl Guest for Component {
     fn init(_state: State, params: (String,)) -> Result<(State,), String> {
         log("Initializing {{actor_name}} actor");
         let (param,) = params;
@@ -20,7 +20,7 @@ impl Guest for {{actor_name}} {
     }
 }
 
-impl MessageServerClient for {{actor_name}} {
+impl MessageServerClient for Component {
     fn handle_send(
         state: Option<Vec<u8>>,
         params: (Vec<u8>,),
@@ -93,7 +93,7 @@ impl MessageServerClient for {{actor_name}} {
     }
 }
 
-bindings::export!({{actor_name}} with_types_in bindings);
+bindings::export!(Component with_types_in bindings);
 "#;
 
     pub(crate) const HTTP_LIB_RS: &str = r#"mod bindings;
@@ -111,9 +111,9 @@ use crate::bindings::ntwk::theater::http_types::{
 use crate::bindings::ntwk::theater::runtime::log;
 use crate::bindings::ntwk::theater::types::State;
 
-struct {{actor_name}};
+struct Component;
 
-impl Guest for {{actor_name}} {
+impl Guest for Component {
     fn init(_state: State, params: (String,)) -> Result<(State,), String> {
         log("Initializing {{actor_name}} actor");
         let (param,) = params;
@@ -147,7 +147,7 @@ impl Guest for {{actor_name}} {
     }
 }
 
-impl HttpHandlersGuest for {{actor_name}} {
+impl HttpHandlersGuest for Component {
     fn handle_request(
         state: Option<Vec<u8>>,
         params: (u64, FrameworkHttpRequest),
@@ -229,7 +229,7 @@ impl HttpHandlersGuest for {{actor_name}} {
     }
 }
 
-impl MessageServerClient for {{actor_name}} {
+impl MessageServerClient for Component {
     fn handle_send(
         state: Option<Vec<u8>>,
         params: (Vec<u8>,),
@@ -302,7 +302,7 @@ impl MessageServerClient for {{actor_name}} {
     }
 }
 
-bindings::export!({{actor_name}} with_types_in bindings);
+bindings::export!(Component with_types_in bindings);
 "#;
 
     pub(crate) const SUPERVISOR_LIB_RS: &str = r#"mod bindings;
@@ -314,9 +314,9 @@ use crate::bindings::ntwk::theater::runtime::log;
 use crate::bindings::ntwk::theater::supervisor as supervisor_host;
 use crate::bindings::ntwk::theater::types::State;
 
-struct {{actor_name}};
+struct Component;
 
-impl Guest for {{actor_name}} {
+impl Guest for Component {
     fn init(_state: State, params: (String,)) -> Result<(State,), String> {
         log("Initializing {{actor_name}} supervisor actor");
         let (param,) = params;
@@ -335,7 +335,7 @@ impl Guest for {{actor_name}} {
     }
 }
 
-impl SupervisorGuest for {{actor_name}} {
+impl SupervisorGuest for Component {
     fn handle_spawn_child(
         state: Option<Vec<u8>>,
         params: (String, Option<String>, Option<Vec<u8>>),
@@ -520,7 +520,7 @@ impl SupervisorGuest for {{actor_name}} {
     }
 }
 
-impl MessageServerClient for {{actor_name}} {
+impl MessageServerClient for Component {
     fn handle_send(
         state: Option<Vec<u8>>,
         params: (Vec<u8>,),
@@ -593,7 +593,7 @@ impl MessageServerClient for {{actor_name}} {
     }
 }
 
-bindings::export!({{actor_name}} with_types_in bindings);
+bindings::export!(Component with_types_in bindings);
 "#;
 
     pub(crate) const FLAKE_NIX: &str = r#"{

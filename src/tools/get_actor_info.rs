@@ -78,8 +78,8 @@ pub fn register_get_actor_info_tool(
                         }
                         
                         let content = vec![
-                            ToolContent::Json {
-                                json: actor_info
+                            ToolContent::Resource {
+                                resource: actor_info
                             }
                         ];
                         

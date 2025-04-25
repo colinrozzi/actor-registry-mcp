@@ -98,8 +98,8 @@ pub fn register_get_actor_path_tool(
                                 format!("Path does not exist: {}", path_str)
                             }
                         },
-                        ToolContent::Json {
-                            json: json!({
+                        ToolContent::Resource {
+                            resource: json!({
                                 "path": path_str,
                                 "exists": exists,
                                 "is_file": target_path.is_file(),

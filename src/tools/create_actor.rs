@@ -66,19 +66,20 @@ pub fn register_create_actor_tool(
             debug!("Creating actor '{}' with template '{:?}' and interfaces {:?}", 
                    name, template, interfaces);
             
-            match registry.create_actor(name, template, interfaces) {
+            // Clone interfaces to avoid losing ownership
+            match registry.create_actor(name, template, interfaces.clone()) {
                 Ok(actor) => {
                     let content = vec![
                         ToolContent::Text {
                             text: format!("Actor '{}' successfully created at {}", 
                                           name, actor.path.display())
                         },
-                        ToolContent::Json {
-                            json: json!({
+                        ToolContent::Resource {
+                            resource: json!({
                                 "name": actor.name,
                                 "path": actor.path.to_string_lossy(),
                                 "template": template.unwrap_or("basic"),
-                                "interfaces": interfaces,
+                                "interfaces": actor.manifest.as_ref().map_or(vec![], |m| m.interface.implements.clone()),
                             })
                         }
                     ];

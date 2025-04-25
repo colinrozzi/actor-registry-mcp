@@ -36,7 +36,7 @@ export THEATER_ACTORS_PATH=/path/to/your/actors
 cargo run --release
 ```
 
-If you do not set the environment variable, the server will use the default path `/Users/colinrozzi/work/actors`.
+If you do not set the environment variable, the server will use the default path `/Users/colinrozzi/work/actor-registry`.
 
 ## Available Tools
 
