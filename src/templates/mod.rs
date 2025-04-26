@@ -601,80 +601,126 @@ bindings::export!(Component with_types_in bindings);
 
   inputs = {
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
-    flake-utils.url = "github:numtide/flake-utils";
     rust-overlay = {
       url = "github:oxalica/rust-overlay";
-      inputs = {
-        nixpkgs.follows = "nixpkgs";
-        flake-utils.follows = "flake-utils";
-      };
+      inputs.nixpkgs.follows = "nixpkgs";
+    };
+    flake-utils.url = "github:numtide/flake-utils";
+    
+    # Add cargo-component source
+    cargo-component-src = {
+      url = "github:bytecodealliance/cargo-component/v0.21.1";
+      flake = false;
     };
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay, ... }:
+
+  outputs = { self, nixpkgs, rust-overlay, flake-utils, cargo-component-src, ... }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ (import rust-overlay) ];
         pkgs = import nixpkgs {
           inherit system overlays;
         };
-
-        rustVersion = pkgs.rust-bin.stable.latest.default;
-        rustPlatform = pkgs.makeRustPlatform {
-          cargo = rustVersion;
-          rustc = rustVersion;
+        
+        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" "rust-analyzer" ];
+          targets = [ "wasm32-unknown-unknown" "wasm32-wasip1" ];
         };
-
-        cargoToml = builtins.fromTOML (builtins.readFile ./Cargo.toml);
-        pname = cargoToml.package.name;
-        version = cargoToml.package.version;
-
-        buildActor = args: rustPlatform.buildRustPackage (rec {
-          inherit pname version;
-          src = ./.;
-
+        
+        # Build cargo-component
+        cargo-component = pkgs.rustPlatform.buildRustPackage {
+          pname = "cargo-component";
+          version = "0.21.1";
+          src = cargo-component-src;
+          
           cargoLock = {
-            lockFile = ./Cargo.lock;
-            outputHashes = {
-            };
+            lockFile = pkgs.runCommand "cargo-component-Cargo.lock" {} ''
+              cp ${cargo-component-src}/Cargo.lock $out
+            '';
           };
-
-          nativeBuildInputs = with pkgs; [
-            pkg-config
-          ];
-
+          
           buildInputs = with pkgs; [
             openssl
+            pkg-config
+          ] ++ pkgs.lib.optionals pkgs.stdenv.isDarwin [
+            pkgs.darwin.apple_sdk.frameworks.Security
+            pkgs.darwin.apple_sdk.frameworks.SystemConfiguration
           ];
+          
+          # Skip tests during build
+          doCheck = false;
+        };
 
-          CARGO_BUILD_TARGET = "wasm32-unknown-unknown";
-          postBuild = ''
-            mkdir -p $out/lib
-            cp target/wasm32-unknown-unknown/release/*.wasm $out/lib/
-          '';
-        } // args);
       in
       {
-        packages = {
-          default = buildActor {};
-
-          ${pname} = buildActor {};
-        };
-
         devShells.default = pkgs.mkShell {
           buildInputs = with pkgs; [
-            (rustVersion.override { targets = [ "wasm32-unknown-unknown" ]; })
+            rustToolchain
             pkg-config
+            openssl
+            # Pre-built cargo-component
+            cargo-component
+            # Tools for WebAssembly development
+            wasmtime
+            binaryen
+            wasm-tools
+            # Development tools
+            rustfmt
+            clippy
+          ];
+
+          RUST_SRC_PATH = "${rustToolchain}/lib/rustlib/src/rust/library";
+          # Set SSL certificates path
+          SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+          NIX_SSL_CERT_FILE = "${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt";
+        };
+
+        packages.default = pkgs.stdenv.mkDerivation {
+          pname = "{{actor_name}}";
+          version = "0.1.0";
+          src = ./.;
+
+          nativeBuildInputs = with pkgs; [ 
+            rustToolchain
+            pkg-config 
+            wasm-tools
+            binaryen
+            cargo-component
+            cacert
+            rustup
+          ];
+          
+          buildInputs = with pkgs; [ 
             openssl
           ];
 
-          shellHook = ''
-            echo "{{actor_name}} development environment"
-            echo "Run 'cargo build --target wasm32-unknown-unknown --release' to build"
+          buildPhase = ''
+            # Create cache directories
+            export CARGO_HOME=$TMPDIR/cargo
+            export XDG_CACHE_HOME=$TMPDIR/cache
+            export CARGO_COMPONENT_CACHE_DIR=$TMPDIR/cargo-component-cache
+            mkdir -p $CARGO_HOME $XDG_CACHE_HOME $CARGO_COMPONENT_CACHE_DIR
+            
+            # Ensure SSL certificates are available
+            export SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+            export NIX_SSL_CERT_FILE=${pkgs.cacert}/etc/ssl/certs/ca-bundle.crt
+            
+            # Build the WebAssembly component
+            cargo component build --release --target wasm32-unknown-unknown
           '';
+
+          installPhase = ''
+            mkdir -p $out/lib
+            
+            # Install WebAssembly files
+            cp ./target/wasm32-unknown-unknown/release/{{actor_name}}.wasm $out/lib/
+          '';
+          
+          # No longer need network access during build
+          __noChroot = false;
         };
-      }
-    );
+      });
 }
 "#;
     pub(crate) const BASIC_WIT: &str = r#"package ntwk:theater;
