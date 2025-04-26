@@ -21,10 +21,6 @@ pub fn register_build_actor_tool(
                     "type": "string",
                     "description": "Name of the actor (required)"
                 },
-                "release": {
-                    "type": "boolean",
-                    "description": "Build in release mode (optional)"
-                }
             },
             "required": ["name"]
         }),
@@ -33,15 +29,13 @@ pub fn register_build_actor_tool(
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow!("Missing required parameter: name"))?;
             
-            let release = args.get("release").and_then(|v| v.as_bool()).unwrap_or(true);
-            
-            debug!("Building actor '{}' with release: {}", name, release);
+            debug!("Building actor '{}'", name);
             
             // First, find the actor
             match registry.find_actor(name) {
                 Ok(actor) => {
                     // Perform build
-                    match actor.build(release) {
+                    match actor.build() {
                         Ok(()) => {
                             // Reload the actor to get updated build info
                             match Registry::new(registry.path())?.find_actor(name) {
@@ -54,19 +48,8 @@ pub fn register_build_actor_tool(
                                     
                                     let content = vec![
                                         ToolContent::Text {
-                                            text: format!("Actor '{}' successfully built.\nComponent path: {}", 
-                                                         name, component_path)
-                                        },
-                                        ToolContent::Resource {
-                                            resource: json!({
-                                                "name": updated_actor.name,
-                                                "build_status": format!("{}", updated_actor.build_info.build_status),
-                                                "component_path": component_path,
-                                                "last_build_time": updated_actor.build_info.last_build_time.map(|t| {
-                                                    t.duration_since(UNIX_EPOCH).unwrap().as_secs()
-                                                }),
-                                                "build_log": updated_actor.build_info.build_log
-                                            })
+                                            text: format!("Actor '{}' successfully built.\nComponent path: {}\nBuild log: {:?}", 
+                                                         name, component_path ,updated_actor.build_info.build_log)
                                         }
                                     ];
                                     

@@ -9,8 +9,8 @@ use tracing::{debug, error, info};
 // Import Theater types
 use theater::config::ManifestConfig;
 
-use crate::utils;
 use crate::templates::templates;
+use crate::utils;
 
 // Use Theater's ManifestConfig instead of our own ActorManifest
 pub type ActorManifest = ManifestConfig;
@@ -42,8 +42,6 @@ pub struct BuildInfo {
     pub component_hash: Option<String>,
     pub build_log: Option<String>,
     pub build_duration: Option<u64>,
-    pub builder: Option<String>,  // "nix" or "cargo"
-    pub release_mode: Option<bool>,
     pub component_size: Option<u64>,
     pub error_message: Option<String>,
 }
@@ -75,8 +73,6 @@ impl Default for BuildInfo {
             component_hash: None,
             build_log: None,
             build_duration: None,
-            builder: None,
-            release_mode: None,
             component_size: None,
             error_message: None,
         }
@@ -148,8 +144,6 @@ impl Actor {
             component_hash: None,
             build_log: None,
             build_duration: None,
-            builder: None,
-            release_mode: None,
             component_size: None,
             error_message: None,
         };
@@ -275,43 +269,44 @@ impl Actor {
         Self::from_path(path)
     }
 
-    pub fn build(&self, release: bool) -> Result<()> {
-        debug!("Building actor '{}' (release: {})", self.name, release);
+    pub fn build(&self) -> Result<()> {
+        debug!("Building actor '{}'", self.name);
 
         // Create build_info directory if it doesn't exist
         let build_info_dir = self.path.join(".build_info");
         if !build_info_dir.exists() {
-            fs::create_dir_all(&build_info_dir)?;
+            fs::create_dir_all(&build_info_dir).expect("Failed to create build_info directory");
         }
 
         // Create log file
         let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
         let log_file = build_info_dir.join(format!("build_{}.log", timestamp));
         let log_file_path = log_file.to_string_lossy().to_string();
-        
+
         // Start timing the build
         let build_start = std::time::Instant::now();
 
         // Update status to building
         let status_file = build_info_dir.join("status");
-        fs::write(&status_file, "BUILDING")?;
+        fs::write(&status_file, "BUILDING").expect("Failed to write status file");
 
         // Execute nix build
         let output = Command::new("nix")
             .args(["build", "--no-link", "--print-out-paths"])
             .current_dir(&self.path)
-            .output()?;
+            .output()
+            .expect("Failed to execute nix build");
 
         // Function to update build info
         let update_build_info = |status: BuildStatus, wasm_path: Option<&str>| -> Result<()> {
             let build_duration = build_start.elapsed().as_secs();
-            
+
             // Calculate component hash and size if available
             let (component_hash, component_size) = if let Some(path) = wasm_path {
                 if Path::new(path).exists() {
                     match (utils::calculate_file_hash(path), utils::get_file_size(path)) {
                         (Ok(hash), Ok(size)) => (Some(hash), Some(size)),
-                        _ => (None, None)
+                        _ => (None, None),
                     }
                 } else {
                     (None, None)
@@ -319,7 +314,7 @@ impl Actor {
             } else {
                 (None, None)
             };
-            
+
             // Extract error message from stderr if build failed
             let error_message = if status == BuildStatus::Failed {
                 let stderr = String::from_utf8_lossy(&output.stderr);
@@ -327,14 +322,15 @@ impl Actor {
                     None
                 } else {
                     // Extract a concise error message - first line that contains "error:"
-                    stderr.lines()
+                    stderr
+                        .lines()
                         .find(|line| line.contains("error:"))
                         .map(|line| line.trim().to_string())
                 }
             } else {
                 None
             };
-            
+
             let component_hash_clone = component_hash.clone();
             let build_info = BuildInfo {
                 last_build_time: Some(SystemTime::now()),
@@ -342,8 +338,6 @@ impl Actor {
                 component_hash,
                 build_log: Some(log_file_path.clone()),
                 build_duration: Some(build_duration),
-                builder: Some("nix".to_string()),
-                release_mode: Some(release),
                 component_size,
                 error_message,
             };
@@ -351,26 +345,25 @@ impl Actor {
             // Write output to log file
             let mut log_content = format!("=== Build Log for {} ===\n", self.name);
             log_content.push_str(&format!("Date: {}\n", timestamp));
-            log_content.push_str(&format!("Release: {}\n", release));
             log_content.push_str(&format!("Builder: nix\n"));
             log_content.push_str(&format!("Duration: {} seconds\n\n", build_duration));
-            
+
             log_content.push_str("=== STDOUT ===\n");
             log_content.push_str(&String::from_utf8_lossy(&output.stdout));
-            
+
             log_content.push_str("\n=== STDERR ===\n");
             log_content.push_str(&String::from_utf8_lossy(&output.stderr));
-            
+
             log_content.push_str(&format!("\n=== Exit Status: {} ===\n", output.status));
-            
+
             if let Some(hash) = &component_hash_clone {
                 log_content.push_str(&format!("\n=== Component Hash: {} ===\n", hash));
             }
-            
+
             if let Some(size) = component_size {
                 log_content.push_str(&format!("\n=== Component Size: {} bytes ===\n", size));
             }
-            
+
             fs::write(&log_file, log_content)?;
 
             // Write build_info to JSON file
@@ -390,7 +383,7 @@ impl Actor {
 
         // Get the output path from stdout
         let nix_store_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
-        
+
         if nix_store_path.is_empty() {
             error!("Failed to determine nix store path");
             update_build_info(BuildStatus::Failed, None)?;
@@ -407,7 +400,10 @@ impl Actor {
             error!("Built WASM file not found at expected path: {}", wasm_path);
             update_build_info(BuildStatus::Failed, Some(&wasm_path))?;
             fs::write(&status_file, "FAILED")?;
-            return Err(anyhow!("Built WASM file not found at expected path: {}", wasm_path));
+            return Err(anyhow!(
+                "Built WASM file not found at expected path: {}",
+                wasm_path
+            ));
         }
 
         // Update the manifest.toml with the new component path
@@ -426,4 +422,3 @@ impl Actor {
         return Ok(());
     }
 }
-

@@ -38,22 +38,13 @@ pub fn register_create_actor_tool(builder: ServerBuilder, registry: Registry) ->
             // Clone interfaces to avoid losing ownership
             match registry.create_actor(name, template) {
                 Ok(actor) => {
-                    let content = vec![
-                        ToolContent::Text {
-                            text: format!(
-                                "Actor '{}' successfully created at {}",
-                                name,
-                                actor.path.display()
-                            ),
-                        },
-                        ToolContent::Resource {
-                            resource: json!({
-                                "name": actor.name,
-                                "path": actor.path.to_string_lossy(),
-                                "template": template.unwrap_or("basic"),
-                            }),
-                        },
-                    ];
+                    let content = vec![ToolContent::Text {
+                        text: format!(
+                            "Actor '{}' successfully created at {}",
+                            name,
+                            actor.path.display()
+                        ),
+                    }];
 
                     Ok(ToolCallResult {
                         content,
@@ -75,4 +66,3 @@ pub fn register_create_actor_tool(builder: ServerBuilder, registry: Registry) ->
         },
     )
 }
-
