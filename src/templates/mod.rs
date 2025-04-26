@@ -713,8 +713,9 @@ bindings::export!(Component with_types_in bindings);
           installPhase = ''
             mkdir -p $out/lib
             
-            # Install WebAssembly files
-            cp ./target/wasm32-unknown-unknown/release/{{actor_name}}.wasm $out/lib/
+            # Install WebAssembly files - transform hyphens to underscores in source file name
+            SOURCE_FILE="./target/wasm32-unknown-unknown/release/$(echo {{actor_name}} | tr '-' '_').wasm"
+            cp $SOURCE_FILE $out/lib/{{actor_name}}.wasm
           '';
           
           # No longer need network access during build

@@ -392,7 +392,9 @@ impl Actor {
         }
 
         // Construct the WASM file path
-        let wasm_file_name = format!("{}.wasm", self.name.replace("-", "_"));
+        // The filename in the nix store will match the actor name (with hyphens)
+        // as we now handle the transformation in the flake.nix template
+        let wasm_file_name = format!("{}.wasm", self.name);
         let wasm_path = format!("{}/lib/{}", nix_store_path, wasm_file_name);
 
         // Check if the WASM file exists
