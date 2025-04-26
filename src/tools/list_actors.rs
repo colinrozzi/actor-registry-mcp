@@ -25,10 +25,9 @@ pub fn register_list_actors_tool(builder: ServerBuilder, registry: Registry) -> 
                     for actor in &actors {
                         text.push_str(&format!("- {} ", actor.name));
 
+                        // Include actor interface information
                         if let Some(ref manifest) = actor.manifest {
-                            if let Some(ref desc) = manifest.description {
-                                text.push_str(&format!("- {}", desc));
-                            }
+                            text.push_str(&format!("- {}", manifest.name));
                         }
 
                         text.push_str(&format!(" [{}]", actor.build_info.build_status));

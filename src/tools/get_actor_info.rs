@@ -35,17 +35,12 @@ pub fn register_get_actor_info_tool(builder: ServerBuilder, registry: Registry) 
                     let mut text = format!("# Actor: {}\n\n", actor.name);
 
                     if let Some(ref manifest) = actor.manifest {
-                        text.push_str(&format!("Version: {}\n", manifest.version));
-
-                        if let Some(ref desc) = manifest.description {
-                            text.push_str(&format!("Description: {}\n", desc));
-                        }
+                        // We no longer have version or description in Theater's manifest
+                        text.push_str("Theater Component\n");
 
                         text.push_str("\n## Interfaces\n\n");
                         text.push_str("Implements:\n");
-                        for interface in &manifest.interface.implements {
-                            text.push_str(&format!("- {}\n", interface));
-                        }
+                        text.push_str(&format!("- {}\n", manifest.interface.implements));
 
                         if !manifest.interface.requires.is_empty() {
                             text.push_str("\nRequires:\n");
@@ -54,8 +49,8 @@ pub fn register_get_actor_info_tool(builder: ServerBuilder, registry: Registry) 
                             }
                         }
 
-                        if let Some(ref component_path) = manifest.component_path {
-                            text.push_str(&format!("\nComponent path: {}\n", component_path));
+                        if !manifest.component_path.is_empty() {
+                            text.push_str(&format!("\nComponent path: {}\n", manifest.component_path));
                         }
                     }
 

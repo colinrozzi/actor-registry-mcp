@@ -49,7 +49,7 @@ pub fn register_build_actor_tool(
                                     // Get component path from the updated actor
                                     let component_path = updated_actor.manifest
                                         .as_ref()
-                                        .and_then(|m| m.component_path.clone())
+                                        .map(|m| m.component_path.clone())
                                         .unwrap_or_else(|| "Unknown".to_string());
                                     
                                     let content = vec![

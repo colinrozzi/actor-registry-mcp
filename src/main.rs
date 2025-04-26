@@ -7,6 +7,9 @@ use std::path::PathBuf;
 use tracing::{debug, info, Level};
 use tracing_subscriber::fmt;
 
+// Import theater for manifest types
+use theater;
+
 // Import our tool implementations
 mod registry;
 mod templates;

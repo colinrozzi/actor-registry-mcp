@@ -6,26 +6,14 @@ use std::process::Command;
 use std::time::SystemTime;
 use tracing::{debug, error, info};
 
-use crate::utils;
+// Import Theater types
+use theater::config::ManifestConfig;
 
+use crate::utils;
 use crate::templates::templates;
 
-#[derive(Debug, Clone, Serialize, Deserialize)]
-pub struct ActorManifest {
-    pub name: String,
-    pub version: String,
-    pub description: Option<String>,
-    pub component_path: Option<String>,
-
-    #[serde(default)]
-    pub interface: ActorInterface,
-}
-
-#[derive(Debug, Clone, Serialize, Deserialize, Default)]
-pub struct ActorInterface {
-    pub implements: Vec<String>,
-    pub requires: Vec<String>,
-}
+// Use Theater's ManifestConfig instead of our own ActorManifest
+pub type ActorManifest = ManifestConfig;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct ActorCargoConfig {
@@ -99,7 +87,7 @@ impl Default for BuildInfo {
 pub struct Actor {
     pub name: String,
     pub path: PathBuf,
-    pub manifest: Option<ActorManifest>,
+    pub manifest: Option<ManifestConfig>,
     pub cargo_config: Option<ActorCargoConfig>,
     pub build_info: BuildInfo,
 }
@@ -143,9 +131,9 @@ impl Actor {
 
         // For now, we use a simple build status check
         // In the future, this would be stored in a build_info.json file
-        let component_path = manifest.as_ref().and_then(|m| m.component_path.clone());
-        let build_status = if let Some(path) = component_path {
-            if Path::new(&path).exists() {
+        let build_status = if let Some(m) = &manifest {
+            let component_path = &m.component_path;
+            if !component_path.is_empty() && Path::new(component_path).exists() {
                 BuildStatus::Success
             } else {
                 BuildStatus::NotBuilt
@@ -191,21 +179,18 @@ impl Actor {
         let template_name = template.unwrap_or("basic");
         debug!("Using template '{}' for actor '{}'", template_name, name);
 
-        // Create manifest.toml
-        let implements = vec!["ntwk:theater/actor".to_string()];
-
-        let manifest = ActorManifest {
+        // Create manifest.toml using Theater's ManifestConfig structure
+        let manifest = ManifestConfig {
             name: name.to_string(),
-            version: "0.1.0".to_string(),
-            description: Some(format!(
-                "A Theater actor created from the {} template",
-                template_name
-            )),
-            component_path: None,
-            interface: ActorInterface {
-                implements,
+            component_path: String::new(), // Empty string for now, will be updated after build
+            init_state: None,
+            interface: theater::config::InterfacesConfig {
+                implements: "ntwk:theater/actor".to_string(),
                 requires: vec![],
             },
+            handlers: vec![], // No handlers by default
+            logging: theater::config::LoggingConfig::default(),
+            event_server: None,
         };
 
         let manifest_content = toml::to_string(&manifest)?;
@@ -425,9 +410,9 @@ impl Actor {
             return Err(anyhow!("Built WASM file not found at expected path: {}", wasm_path));
         }
 
-        // Update the manifest.toml
+        // Update the manifest.toml with the new component path
         if let Some(mut manifest) = self.manifest.clone() {
-            manifest.component_path = Some(wasm_path.clone());
+            manifest.component_path = wasm_path.clone();
 
             let manifest_content = toml::to_string(&manifest)?;
             fs::write(self.path.join("manifest.toml"), manifest_content)?;
