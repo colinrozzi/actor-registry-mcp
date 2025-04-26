@@ -1,11 +1,9 @@
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
 use mcp_server::ServerBuilder;
 use serde_json::json;
-use tracing::{info, debug, error, warn};
-use anyhow::{Result, anyhow};
-use std::time::{SystemTime, UNIX_EPOCH};
-
-use crate::registry::actor::BuildStatus;
+use tracing::{debug, error, warn};
+use anyhow::anyhow;
+use std::time::UNIX_EPOCH;
 
 use crate::registry::Registry;
 

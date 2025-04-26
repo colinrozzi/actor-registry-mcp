@@ -159,6 +159,11 @@ impl Actor {
             build_status,
             component_hash: None,
             build_log: None,
+            build_duration: None,
+            builder: None,
+            release_mode: None,
+            component_size: None,
+            error_message: None,
         };
 
         Ok(Self {
@@ -345,6 +350,7 @@ impl Actor {
                 None
             };
             
+            let component_hash_clone = component_hash.clone();
             let build_info = BuildInfo {
                 last_build_time: Some(SystemTime::now()),
                 build_status: status,
@@ -372,7 +378,7 @@ impl Actor {
             
             log_content.push_str(&format!("\n=== Exit Status: {} ===\n", output.status));
             
-            if let Some(hash) = &component_hash {
+            if let Some(hash) = &component_hash_clone {
                 log_content.push_str(&format!("\n=== Component Hash: {} ===\n", hash));
             }
             
