@@ -1,5 +1,8 @@
 use std::path::Path;
 use std::fs;
+use std::io::Read;
+use std::collections::hash_map::DefaultHasher;
+use std::hash::{Hash, Hasher};
 use anyhow::{Result, Context};
 use tracing::debug;
 
@@ -53,4 +56,35 @@ pub fn format_actor_list(names: &[String], detailed: bool) -> String {
     } else {
         names.join(", ")
     }
+}
+
+/// Calculate a hash for a file
+pub fn calculate_file_hash<P: AsRef<Path>>(path: P) -> Result<String> {
+    // Create a hasher
+    let mut hasher = DefaultHasher::new();
+    
+    // Open the file
+    let mut file = fs::File::open(path)?;
+    
+    // Read the file in chunks to avoid loading large files into memory
+    let mut buffer = [0; 1024];
+    loop {
+        let bytes_read = file.read(&mut buffer)?;
+        if bytes_read == 0 {
+            break;
+        }
+        buffer[..bytes_read].hash(&mut hasher);
+    }
+    
+    // Get the hash
+    let hash = hasher.finish();
+    
+    // Return the hash as a hex string
+    Ok(format!("{:016x}", hash))
+}
+
+/// Get the size of a file in bytes
+pub fn get_file_size<P: AsRef<Path>>(path: P) -> Result<u64> {
+    let metadata = fs::metadata(path)?;
+    Ok(metadata.len())
 }

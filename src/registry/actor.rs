@@ -6,6 +6,8 @@ use std::process::Command;
 use std::time::SystemTime;
 use tracing::{debug, error, info};
 
+use crate::utils;
+
 use crate::templates::templates;
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -51,6 +53,11 @@ pub struct BuildInfo {
     pub build_status: BuildStatus,
     pub component_hash: Option<String>,
     pub build_log: Option<String>,
+    pub build_duration: Option<u64>,
+    pub builder: Option<String>,  // "nix" or "cargo"
+    pub release_mode: Option<bool>,
+    pub component_size: Option<u64>,
+    pub error_message: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
@@ -79,6 +86,11 @@ impl Default for BuildInfo {
             build_status: BuildStatus::NotBuilt,
             component_hash: None,
             build_log: None,
+            build_duration: None,
+            builder: None,
+            release_mode: None,
+            component_size: None,
+            error_message: None,
         }
     }
 }
@@ -276,72 +288,151 @@ impl Actor {
     pub fn build(&self, release: bool) -> Result<()> {
         debug!("Building actor '{}' (release: {})", self.name, release);
 
-        // For now, we'll just simulate the build process
-        // In a real implementation, this would run nix build or cargo build
-
-        // Check if the actor directory has a flake.nix
-        let flake_path = self.path.join("flake.nix");
-        if flake_path.exists() {
-            info!("Building actor '{}' with nix flake", self.name);
-
-            // In a real implementation, we would run:
-            // let output = Command::new("nix")
-            //     .arg("build")
-            //     .current_dir(&self.path)
-            //     .output()?;
-
-            // Simulate successful build for now
-            let new_component_path = format!(
-                "/nix/store/abcdef-{}-0.1.0/lib/{}.wasm",
-                self.name,
-                self.name.replace("-", "_")
-            );
-
-            // Update the manifest.toml
-            if let Some(mut manifest) = self.manifest.clone() {
-                manifest.component_path = Some(new_component_path);
-
-                let manifest_content = toml::to_string(&manifest)?;
-                fs::write(self.path.join("manifest.toml"), manifest_content)?;
-
-                info!("Updated manifest.toml with new component path");
-            }
-
-            info!("Build completed successfully");
-            return Ok(());
-        } else {
-            // Fallback to cargo build
-            info!("Building actor '{}' with cargo", self.name);
-
-            // In a real implementation, we would run:
-            // let target = if release { "--release" } else { "" };
-            // let output = Command::new("cargo")
-            //     .args(["build", "--target", "wasm32-unknown-unknown", target])
-            //     .current_dir(&self.path)
-            //     .output()?;
-
-            // Simulate successful build
-            let target_type = if release { "release" } else { "debug" };
-            let new_component_path = format!(
-                "{}/target/wasm32-unknown-unknown/{}/{}.wasm",
-                self.path.display(),
-                target_type,
-                self.name.replace("-", "_")
-            );
-
-            // Update the manifest.toml
-            if let Some(mut manifest) = self.manifest.clone() {
-                manifest.component_path = Some(new_component_path);
-
-                let manifest_content = toml::to_string(&manifest)?;
-                fs::write(self.path.join("manifest.toml"), manifest_content)?;
-
-                info!("Updated manifest.toml with new component path");
-            }
-
-            info!("Build completed successfully");
-            return Ok(());
+        // Create build_info directory if it doesn't exist
+        let build_info_dir = self.path.join(".build_info");
+        if !build_info_dir.exists() {
+            fs::create_dir_all(&build_info_dir)?;
         }
+
+        // Create log file
+        let timestamp = chrono::Local::now().format("%Y%m%d_%H%M%S");
+        let log_file = build_info_dir.join(format!("build_{}.log", timestamp));
+        let log_file_path = log_file.to_string_lossy().to_string();
+        
+        // Start timing the build
+        let build_start = std::time::Instant::now();
+
+        // Update status to building
+        let status_file = build_info_dir.join("status");
+        fs::write(&status_file, "BUILDING")?;
+
+        // Execute nix build
+        let output = Command::new("nix")
+            .args(["build", "--no-link", "--print-out-paths"])
+            .current_dir(&self.path)
+            .output()?;
+
+        // Function to update build info
+        let update_build_info = |status: BuildStatus, wasm_path: Option<&str>| -> Result<()> {
+            let build_duration = build_start.elapsed().as_secs();
+            
+            // Calculate component hash and size if available
+            let (component_hash, component_size) = if let Some(path) = wasm_path {
+                if Path::new(path).exists() {
+                    match (utils::calculate_file_hash(path), utils::get_file_size(path)) {
+                        (Ok(hash), Ok(size)) => (Some(hash), Some(size)),
+                        _ => (None, None)
+                    }
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+            
+            // Extract error message from stderr if build failed
+            let error_message = if status == BuildStatus::Failed {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.is_empty() {
+                    None
+                } else {
+                    // Extract a concise error message - first line that contains "error:"
+                    stderr.lines()
+                        .find(|line| line.contains("error:"))
+                        .map(|line| line.trim().to_string())
+                }
+            } else {
+                None
+            };
+            
+            let build_info = BuildInfo {
+                last_build_time: Some(SystemTime::now()),
+                build_status: status,
+                component_hash,
+                build_log: Some(log_file_path.clone()),
+                build_duration: Some(build_duration),
+                builder: Some("nix".to_string()),
+                release_mode: Some(release),
+                component_size,
+                error_message,
+            };
+
+            // Write output to log file
+            let mut log_content = format!("=== Build Log for {} ===\n", self.name);
+            log_content.push_str(&format!("Date: {}\n", timestamp));
+            log_content.push_str(&format!("Release: {}\n", release));
+            log_content.push_str(&format!("Builder: nix\n"));
+            log_content.push_str(&format!("Duration: {} seconds\n\n", build_duration));
+            
+            log_content.push_str("=== STDOUT ===\n");
+            log_content.push_str(&String::from_utf8_lossy(&output.stdout));
+            
+            log_content.push_str("\n=== STDERR ===\n");
+            log_content.push_str(&String::from_utf8_lossy(&output.stderr));
+            
+            log_content.push_str(&format!("\n=== Exit Status: {} ===\n", output.status));
+            
+            if let Some(hash) = &component_hash {
+                log_content.push_str(&format!("\n=== Component Hash: {} ===\n", hash));
+            }
+            
+            if let Some(size) = component_size {
+                log_content.push_str(&format!("\n=== Component Size: {} bytes ===\n", size));
+            }
+            
+            fs::write(&log_file, log_content)?;
+
+            // Write build_info to JSON file
+            let build_info_json = serde_json::to_string_pretty(&build_info)?;
+            fs::write(build_info_dir.join("build_info.json"), build_info_json)?;
+
+            Ok(())
+        };
+
+        // Check build status
+        if !output.status.success() {
+            error!("Nix build failed with status: {}", output.status);
+            update_build_info(BuildStatus::Failed, None)?;
+            fs::write(&status_file, "FAILED")?;
+            return Err(anyhow!("Nix build failed with status: {}", output.status));
+        }
+
+        // Get the output path from stdout
+        let nix_store_path = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        
+        if nix_store_path.is_empty() {
+            error!("Failed to determine nix store path");
+            update_build_info(BuildStatus::Failed, None)?;
+            fs::write(&status_file, "FAILED")?;
+            return Err(anyhow!("Failed to determine nix store path"));
+        }
+
+        // Construct the WASM file path
+        let wasm_file_name = format!("{}.wasm", self.name.replace("-", "_"));
+        let wasm_path = format!("{}/lib/{}", nix_store_path, wasm_file_name);
+
+        // Check if the WASM file exists
+        if !Path::new(&wasm_path).exists() {
+            error!("Built WASM file not found at expected path: {}", wasm_path);
+            update_build_info(BuildStatus::Failed, Some(&wasm_path))?;
+            fs::write(&status_file, "FAILED")?;
+            return Err(anyhow!("Built WASM file not found at expected path: {}", wasm_path));
+        }
+
+        // Update the manifest.toml
+        if let Some(mut manifest) = self.manifest.clone() {
+            manifest.component_path = Some(wasm_path.clone());
+
+            let manifest_content = toml::to_string(&manifest)?;
+            fs::write(self.path.join("manifest.toml"), manifest_content)?;
+
+            info!("Updated manifest.toml with new component path");
+        }
+
+        update_build_info(BuildStatus::Success, Some(&wasm_path))?;
+        fs::write(&status_file, "SUCCESS")?;
+        info!("Build completed successfully");
+        return Ok(());
     }
 }
 

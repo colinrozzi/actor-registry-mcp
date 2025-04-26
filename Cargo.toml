@@ -15,5 +15,6 @@ tracing-subscriber = "0.3"
 walkdir = "2.4"
 toml = "0.8"
 regex = "1.10"
+chrono = "0.4"
 # Replaced nix-cmd with std::process for executing commands
 # nix-cmd = "0.6"
