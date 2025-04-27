@@ -19,7 +19,7 @@ pub fn register_create_actor_tool(builder: ServerBuilder, registry: Registry) ->
                 },
                 "template": {
                     "type": "string",
-                    "description": "Template to use (defaults to basic, only basic is supported)"
+                    "description": "Template to use (defaults to basic, basic or http supported)"
                 }
             },
             "required": ["name"]
