@@ -100,9 +100,22 @@ impl Registry {
     }
 
     pub fn build_actor(&self, name: &str, release: bool) -> Result<()> {
-        let actor = self.find_actor(name)?;
-        // Note: release parameter is ignored for now as actor.build() doesn't use it yet
-        actor.build()
+        match self.find_actor(name) {
+            Ok(actor) => {
+                // Note: release parameter is ignored for now as actor.build() doesn't use it yet
+                match actor.build() {
+                    Ok(()) => Ok(()),
+                    Err(e) => {
+                        error!("Build failed for actor '{}': {}", name, e);
+                        Err(e)
+                    }
+                }
+            },
+            Err(e) => {
+                error!("Failed to find actor '{}' for building: {}", name, e);
+                Err(e)
+            }
+        }
     }
 
     pub fn get_templates(&self) -> Vec<String> {

@@ -39,18 +39,12 @@ pub fn register_get_actor_info_tool(builder: ServerBuilder, registry: Registry) 
                         text.push_str("Theater Component\n");
 
                         text.push_str("\n## Interfaces\n\n");
-                        text.push_str("Implements:\n");
-                        text.push_str(&format!("- {}\n", manifest.interface.implements));
-
-                        if !manifest.interface.requires.is_empty() {
-                            text.push_str("\nRequires:\n");
-                            for interface in &manifest.interface.requires {
-                                text.push_str(&format!("- {}\n", interface));
-                            }
-                        }
 
                         if !manifest.component_path.is_empty() {
-                            text.push_str(&format!("\nComponent path: {}\n", manifest.component_path));
+                            text.push_str(&format!(
+                                "\nComponent path: {}\n",
+                                manifest.component_path
+                            ));
                         }
                     }
 
@@ -97,4 +91,3 @@ pub fn register_get_actor_info_tool(builder: ServerBuilder, registry: Registry) 
         },
     )
 }
-

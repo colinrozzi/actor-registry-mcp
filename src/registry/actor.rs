@@ -7,7 +7,7 @@ use std::time::SystemTime;
 use tracing::{debug, error, info};
 
 // Import Theater types
-use theater::config::ManifestConfig;
+use theater::config::{HandlerConfig, ManifestConfig, RuntimeHostConfig};
 
 use crate::templates::templates;
 use crate::utils;
@@ -177,14 +177,13 @@ impl Actor {
         let manifest = ManifestConfig {
             name: name.to_string(),
             component_path: String::new(), // Empty string for now, will be updated after build
+            short_description: Some(format!(
+                "A Theater actor created from the {} template.",
+                template_name
+            )),
+            long_description: None,
             init_state: None,
-            interface: theater::config::InterfacesConfig {
-                implements: "ntwk:theater/actor".to_string(),
-                requires: vec![],
-            },
-            handlers: vec![], // No handlers by default
-            logging: theater::config::LoggingConfig::default(),
-            event_server: None,
+            handlers: vec![HandlerConfig::Runtime(RuntimeHostConfig {})],
         };
 
         let manifest_content = toml::to_string(&manifest)?;
@@ -291,11 +290,57 @@ impl Actor {
         fs::write(&status_file, "BUILDING").expect("Failed to write status file");
 
         // Execute nix build
-        let output = Command::new("nix")
+        let output = match Command::new("/nix/var/nix/profiles/default/bin/nix")
             .args(["build", "--no-link", "--print-out-paths"])
             .current_dir(&self.path)
             .output()
-            .expect("Failed to execute nix build");
+        {
+            Ok(output) => output,
+            Err(e) => {
+                error!("Failed to execute nix build command: {}", e);
+
+                // Create a failure log
+                let mut log_content = format!("=== Build Log for {} ===\n", self.name);
+                log_content.push_str(&format!("Date: {}\n", timestamp));
+                log_content.push_str("Builder: nix\n");
+                log_content.push_str(&format!(
+                    "Duration: {} seconds\n\n",
+                    build_start.elapsed().as_secs()
+                ));
+                log_content.push_str(&format!(
+                    "ERROR: Failed to execute nix build command: {}\n",
+                    e
+                ));
+
+                // Write the log file
+                if let Err(write_err) = fs::write(&log_file, log_content) {
+                    error!("Failed to write build log: {}", write_err);
+                }
+
+                // Update status
+                if let Err(status_err) = fs::write(&status_file, "FAILED") {
+                    error!("Failed to update status file: {}", status_err);
+                }
+
+                // Create simplified build_info
+                let build_info = BuildInfo {
+                    last_build_time: Some(SystemTime::now()),
+                    build_status: BuildStatus::Failed,
+                    component_hash: None,
+                    build_log: Some(log_file_path),
+                    build_duration: Some(build_start.elapsed().as_secs()),
+                    component_size: None,
+                    error_message: Some(format!("Failed to execute nix build command: {}", e)),
+                };
+
+                // Write build_info
+                if let Ok(build_info_json) = serde_json::to_string_pretty(&build_info) {
+                    let _ = fs::write(build_info_dir.join("build_info.json"), build_info_json);
+                }
+
+                return Err(anyhow!("Failed to execute nix build command: {}", e));
+            }
+        };
 
         // Function to update build info
         let update_build_info = |status: BuildStatus, wasm_path: Option<&str>| -> Result<()> {
@@ -376,8 +421,12 @@ impl Actor {
         // Check build status
         if !output.status.success() {
             error!("Nix build failed with status: {}", output.status);
-            update_build_info(BuildStatus::Failed, None)?;
-            fs::write(&status_file, "FAILED")?;
+            if let Err(e) = update_build_info(BuildStatus::Failed, None) {
+                error!("Failed to update build info: {}", e);
+            }
+            if let Err(e) = fs::write(&status_file, "FAILED") {
+                error!("Failed to write status file: {}", e);
+            }
             return Err(anyhow!("Nix build failed with status: {}", output.status));
         }
 
@@ -386,8 +435,12 @@ impl Actor {
 
         if nix_store_path.is_empty() {
             error!("Failed to determine nix store path");
-            update_build_info(BuildStatus::Failed, None)?;
-            fs::write(&status_file, "FAILED")?;
+            if let Err(e) = update_build_info(BuildStatus::Failed, None) {
+                error!("Failed to update build info: {}", e);
+            }
+            if let Err(e) = fs::write(&status_file, "FAILED") {
+                error!("Failed to write status file: {}", e);
+            }
             return Err(anyhow!("Failed to determine nix store path"));
         }
 
@@ -400,8 +453,12 @@ impl Actor {
         // Check if the WASM file exists
         if !Path::new(&wasm_path).exists() {
             error!("Built WASM file not found at expected path: {}", wasm_path);
-            update_build_info(BuildStatus::Failed, Some(&wasm_path))?;
-            fs::write(&status_file, "FAILED")?;
+            if let Err(e) = update_build_info(BuildStatus::Failed, Some(&wasm_path)) {
+                error!("Failed to update build info: {}", e);
+            }
+            if let Err(e) = fs::write(&status_file, "FAILED") {
+                error!("Failed to write status file: {}", e);
+            }
             return Err(anyhow!(
                 "Built WASM file not found at expected path: {}",
                 wasm_path
@@ -412,14 +469,31 @@ impl Actor {
         if let Some(mut manifest) = self.manifest.clone() {
             manifest.component_path = wasm_path.clone();
 
-            let manifest_content = toml::to_string(&manifest)?;
-            fs::write(self.path.join("manifest.toml"), manifest_content)?;
-
-            info!("Updated manifest.toml with new component path");
+            match toml::to_string(&manifest) {
+                Ok(manifest_content) => {
+                    if let Err(e) = fs::write(self.path.join("manifest.toml"), manifest_content) {
+                        error!("Failed to write manifest.toml: {}", e);
+                        // Continue anyway to ensure we record build success
+                    } else {
+                        info!("Updated manifest.toml with new component path");
+                    }
+                }
+                Err(e) => {
+                    error!("Failed to serialize manifest: {}", e);
+                    // Continue anyway to ensure we record build success
+                }
+            }
         }
 
-        update_build_info(BuildStatus::Success, Some(&wasm_path))?;
-        fs::write(&status_file, "SUCCESS")?;
+        // Ensure we still write build info and status even if there are errors
+        if let Err(e) = update_build_info(BuildStatus::Success, Some(&wasm_path)) {
+            error!("Failed to update build info: {}", e);
+        }
+
+        if let Err(e) = fs::write(&status_file, "SUCCESS") {
+            error!("Failed to write status file: {}", e);
+        }
+
         info!("Build completed successfully");
         return Ok(());
     }

@@ -714,6 +714,9 @@ bindings::export!(Component with_types_in bindings);
             mkdir -p $out/lib
             
             # Install WebAssembly files - transform hyphens to underscores in source file name
+            echo "Copying WebAssembly file to $out/lib"
+            echo "Looking for: ./target/wasm32-unknown-unknown/release/$(echo {{actor_name}} | tr '-' '_').wasm"
+            echo "LS: $(ls ./target/wasm32-unknown-unknown/release)"
             SOURCE_FILE="./target/wasm32-unknown-unknown/release/$(echo {{actor_name}} | tr '-' '_').wasm"
             cp $SOURCE_FILE $out/lib/{{actor_name}}.wasm
           '';

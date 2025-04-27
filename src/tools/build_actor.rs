@@ -75,9 +75,29 @@ pub fn register_build_actor_tool(
                         },
                         Err(e) => {
                             error!("Failed to build actor: {}", e);
+                            
+                            // Try to get build info anyway to provide more details to the user
+                            let additional_info = match Registry::new(registry.path()) {
+                                Ok(reg) => match reg.find_actor(name) {
+                                    Ok(actor) => {
+                                        let build_log = actor.build_info.build_log
+                                            .map(|log| format!("\nBuild log: {}", log))
+                                            .unwrap_or_default();
+                                            
+                                        let error_msg = actor.build_info.error_message
+                                            .map(|msg| format!("\nError message: {}", msg))
+                                            .unwrap_or_default();
+                                            
+                                        format!("{}{}", build_log, error_msg)
+                                    },
+                                    Err(_) => String::new()
+                                },
+                                Err(_) => String::new()
+                            };
+                            
                             let content = vec![
                                 ToolContent::Text {
-                                    text: format!("Failed to build actor: {}", e)
+                                    text: format!("Failed to build actor: {}{}", e, additional_info)
                                 }
                             ];
                             
