@@ -15,8 +15,10 @@ pub fn get_description() -> &'static str {
 pub fn get_handlers() -> Vec<theater::config::HandlerConfig> {
     vec![
         theater::config::HandlerConfig::Runtime(theater::config::RuntimeHostConfig {}),
-        // For HTTP handlers, we'll use a more basic approach until we know
-        // the correct way to define HTTP framework handlers
+        theater::config::HandlerConfig::HttpFramework(
+            theater::config::HttpFrameworkHandlerConfig {},
+        ), // For HTTP handlers, we'll use a more basic approach until we know
+           // the correct way to define HTTP framework handlers
     ]
 }
 

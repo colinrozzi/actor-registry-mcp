@@ -223,18 +223,18 @@ impl Actor {
             "http" => crate::templates::http::LIB_RS,
             _ => return Err(anyhow!("Unknown template: {}", template_name)),
         };
-        
+
         // Replace placeholders
         let lib_rs_content = lib_rs_content.replace("{{actor_name}}", name);
         fs::write(path.join("src").join("lib.rs"), lib_rs_content)?;
-        
+
         // Generate world.wit content based on template
         let wit_content = match template_name {
             "basic" => crate::templates::basic::WORLD_WIT,
             "http" => crate::templates::http::WORLD_WIT,
             _ => return Err(anyhow!("Unknown template: {}", template_name)),
         };
-        
+
         // Replace placeholders
         let wit_content = wit_content.replace("{{actor_name}}", name);
         fs::write(path.join("wit").join("world.wit"), wit_content)?;
@@ -261,7 +261,7 @@ impl Actor {
             "http" => crate::templates::http::generate_readme(name),
             _ => format!("# {}\n\nA Theater actor.\n", name),
         };
-        
+
         fs::write(path.join("README.md"), readme_content)?;
 
         // Create a flake.nix file (common to all templates)
@@ -273,7 +273,6 @@ impl Actor {
         // Return the created actor
         Self::from_path(path)
     }
-
     pub fn build(&self) -> Result<()> {
         debug!("Building actor '{}'", self.name);
 
@@ -348,30 +347,91 @@ impl Actor {
             }
         };
 
+        // Function to update build info
+        let update_build_info = |status: BuildStatus, wasm_path: Option<&str>| -> Result<()> {
+            let build_duration = build_start.elapsed().as_secs();
+
+            // Calculate component hash and size if available
+            let (component_hash, component_size) = if let Some(path) = wasm_path {
+                if Path::new(path).exists() {
+                    match (utils::calculate_file_hash(path), utils::get_file_size(path)) {
+                        (Ok(hash), Ok(size)) => (Some(hash), Some(size)),
+                        _ => (None, None),
+                    }
+                } else {
+                    (None, None)
+                }
+            } else {
+                (None, None)
+            };
+
+            // Extract error message from stderr if build failed
+            let error_message = if status == BuildStatus::Failed {
+                let stderr = String::from_utf8_lossy(&output.stderr);
+                if stderr.is_empty() {
+                    None
+                } else {
+                    // Extract a concise error message - first line that contains "error:"
+                    stderr
+                        .lines()
+                        .find(|line| line.contains("error:"))
+                        .map(|line| line.trim().to_string())
+                }
+            } else {
+                None
+            };
+
+            let component_hash_clone = component_hash.clone();
+            let build_info = BuildInfo {
+                last_build_time: Some(SystemTime::now()),
+                build_status: status,
+                component_hash,
+                build_log: Some(log_file_path.clone()),
+                build_duration: Some(build_duration),
+                component_size,
+                error_message,
+            };
+
+            // Write output to log file
+            let mut log_content = format!("=== Build Log for {} ===\n", self.name);
+            log_content.push_str(&format!("Date: {}\n", timestamp));
+            log_content.push_str(&format!("Builder: nix\n"));
+            log_content.push_str(&format!("Duration: {} seconds\n\n", build_duration));
+
+            log_content.push_str("=== STDOUT ===\n");
+            log_content.push_str(&String::from_utf8_lossy(&output.stdout));
+
+            log_content.push_str("\n=== STDERR ===\n");
+            log_content.push_str(&String::from_utf8_lossy(&output.stderr));
+
+            log_content.push_str(&format!("\n=== Exit Status: {} ===\n", output.status));
+
+            if let Some(hash) = &component_hash_clone {
+                log_content.push_str(&format!("\n=== Component Hash: {} ===\n", hash));
+            }
+
+            if let Some(size) = component_size {
+                log_content.push_str(&format!("\n=== Component Size: {} bytes ===\n", size));
+            }
+
+            fs::write(&log_file, log_content)?;
+
+            // Write build_info to JSON file
+            let build_info_json = serde_json::to_string_pretty(&build_info)?;
+            fs::write(build_info_dir.join("build_info.json"), build_info_json)?;
+
+            Ok(())
+        };
+
         // Check build status
         if !output.status.success() {
             error!("Nix build failed with status: {}", output.status);
-            
-            // Update build info
-            let build_info = BuildInfo {
-                last_build_time: Some(SystemTime::now()),
-                build_status: BuildStatus::Failed,
-                component_hash: None,
-                build_log: Some(log_file_path),
-                build_duration: Some(build_start.elapsed().as_secs()),
-                component_size: None,
-                error_message: Some(format!("Build failed with status: {}", output.status)),
-            };
-            
-            // Write build_info
-            if let Ok(build_info_json) = serde_json::to_string_pretty(&build_info) {
-                let _ = fs::write(build_info_dir.join("build_info.json"), build_info_json);
+            if let Err(e) = update_build_info(BuildStatus::Failed, None) {
+                error!("Failed to update build info: {}", e);
             }
-            
             if let Err(e) = fs::write(&status_file, "FAILED") {
                 error!("Failed to write status file: {}", e);
             }
-            
             return Err(anyhow!("Nix build failed with status: {}", output.status));
         }
 
@@ -380,6 +440,9 @@ impl Actor {
 
         if nix_store_path.is_empty() {
             error!("Failed to determine nix store path");
+            if let Err(e) = update_build_info(BuildStatus::Failed, None) {
+                error!("Failed to update build info: {}", e);
+            }
             if let Err(e) = fs::write(&status_file, "FAILED") {
                 error!("Failed to write status file: {}", e);
             }
@@ -387,16 +450,24 @@ impl Actor {
         }
 
         // Construct the WASM file path
+        // The filename in the nix store will match the actor name (with hyphens)
+        // as we now handle the transformation in the flake.nix template
         let wasm_file_name = format!("{}.wasm", self.name);
         let wasm_path = format!("{}/lib/{}", nix_store_path, wasm_file_name);
 
         // Check if the WASM file exists
         if !Path::new(&wasm_path).exists() {
             error!("Built WASM file not found at expected path: {}", wasm_path);
+            if let Err(e) = update_build_info(BuildStatus::Failed, Some(&wasm_path)) {
+                error!("Failed to update build info: {}", e);
+            }
             if let Err(e) = fs::write(&status_file, "FAILED") {
                 error!("Failed to write status file: {}", e);
             }
-            return Err(anyhow!("Built WASM file not found at expected path: {}", wasm_path));
+            return Err(anyhow!(
+                "Built WASM file not found at expected path: {}",
+                wasm_path
+            ));
         }
 
         // Update the manifest.toml with the new component path
@@ -407,73 +478,28 @@ impl Actor {
                 Ok(manifest_content) => {
                     if let Err(e) = fs::write(self.path.join("manifest.toml"), manifest_content) {
                         error!("Failed to write manifest.toml: {}", e);
+                        // Continue anyway to ensure we record build success
                     } else {
                         info!("Updated manifest.toml with new component path");
                     }
                 }
                 Err(e) => {
                     error!("Failed to serialize manifest: {}", e);
+                    // Continue anyway to ensure we record build success
                 }
             }
         }
 
-        // Calculate hash and size of the WASM file
-        let (component_hash, component_size) = match (utils::calculate_file_hash(&wasm_path), utils::get_file_size(&wasm_path)) {
-            (Ok(hash), Ok(size)) => (Some(hash), Some(size)),
-            _ => (None, None),
-        };
-
-        // Create build info
-        let build_info = BuildInfo {
-            last_build_time: Some(SystemTime::now()),
-            build_status: BuildStatus::Success,
-            component_hash: component_hash.clone(),
-            build_log: Some(log_file_path),
-            build_duration: Some(build_start.elapsed().as_secs()),
-            component_size,
-            error_message: None,
-        };
-
-        // Write build info
-        match serde_json::to_string_pretty(&build_info) {
-            Ok(build_info_json) => {
-                if let Err(e) = fs::write(build_info_dir.join("build_info.json"), build_info_json) {
-                    error!("Failed to write build info: {}", e);
-                }
-            }
-            Err(e) => {
-                error!("Failed to serialize build info: {}", e);
-            }
+        // Ensure we still write build info and status even if there are errors
+        if let Err(e) = update_build_info(BuildStatus::Success, Some(&wasm_path)) {
+            error!("Failed to update build info: {}", e);
         }
 
-        // Update status
         if let Err(e) = fs::write(&status_file, "SUCCESS") {
             error!("Failed to write status file: {}", e);
         }
 
-        // Create log file with build information
-        let mut log_content = format!("=== Build Log for {} ===\n", self.name);
-        log_content.push_str(&format!("Date: {}\n", timestamp));
-        log_content.push_str("Builder: nix\n");
-        log_content.push_str(&format!("Duration: {} seconds\n\n", build_start.elapsed().as_secs()));
-        log_content.push_str("=== STDOUT ===\n");
-        log_content.push_str(&String::from_utf8_lossy(&output.stdout));
-        log_content.push_str("\n=== STDERR ===\n");
-        log_content.push_str(&String::from_utf8_lossy(&output.stderr));
-        log_content.push_str(&format!("\n=== Exit Status: {} ===\n", output.status));
-        if let Some(hash) = &component_hash {
-            log_content.push_str(&format!("\n=== Component Hash: {} ===\n", hash));
-        }
-        if let Some(size) = component_size {
-            log_content.push_str(&format!("\n=== Component Size: {} bytes ===\n", size));
-        }
-
-        // Write log file
-        if let Err(e) = fs::write(&log_file, log_content) {
-            error!("Failed to write build log: {}", e);
-        }
-
         info!("Build completed successfully");
-        Ok(())
+        return Ok(());
     }
 }
