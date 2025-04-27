@@ -173,17 +173,41 @@ impl Actor {
         let template_name = template.unwrap_or("basic");
         debug!("Using template '{}' for actor '{}'", template_name, name);
 
-        // Create manifest.toml using Theater's ManifestConfig structure
-        let manifest = ManifestConfig {
-            name: name.to_string(),
-            component_path: String::new(), // Empty string for now, will be updated after build
-            short_description: Some(format!(
-                "A Theater actor created from the {} template.",
-                template_name
-            )),
-            long_description: None,
-            init_state: None,
-            handlers: vec![HandlerConfig::Runtime(RuntimeHostConfig {})],
+        // Create manifest.toml using Theater's ManifestConfig structure with template-specific handlers
+        let manifest = match template_name {
+            "http" => ManifestConfig {
+                name: name.to_string(),
+                component_path: String::new(),
+                short_description: Some(format!(
+                    "An HTTP server actor created from the {} template.",
+                    template_name
+                )),
+                long_description: None,
+                init_state: None,
+                handlers: vec![
+                    HandlerConfig::Runtime(RuntimeHostConfig {}),
+                    // Add HTTP framework and client handlers
+                    HandlerConfig::Other { 
+                        type_: "http-framework".to_string(), 
+                        config: std::collections::HashMap::new() 
+                    },
+                    HandlerConfig::Other { 
+                        type_: "http-client".to_string(), 
+                        config: std::collections::HashMap::new() 
+                    },
+                ],
+            },
+            _ => ManifestConfig {
+                name: name.to_string(),
+                component_path: String::new(), // Empty string for now, will be updated after build
+                short_description: Some(format!(
+                    "A Theater actor created from the {} template.",
+                    template_name
+                )),
+                long_description: None,
+                init_state: None,
+                handlers: vec![HandlerConfig::Runtime(RuntimeHostConfig {})],
+            },
         };
 
         let manifest_content = toml::to_string(&manifest)?;
@@ -220,6 +244,7 @@ impl Actor {
         // Create a basic lib.rs file based on the template
         let lib_rs_content = match template_name {
             "basic" => templates::BASIC_LIB_RS,
+            "http" => templates::HTTP_LIB_RS,
             _ => return Err(anyhow!("Unknown template: {}", template_name)),
         };
 
@@ -229,6 +254,7 @@ impl Actor {
         // Create the WIT world based on the template
         let wit_content = match template_name {
             "basic" => templates::BASIC_WIT,
+            "http" => templates::HTTP_WIT,
             _ => return Err(anyhow!("Unknown template: {}", template_name)),
         };
 
@@ -251,11 +277,21 @@ impl Actor {
             }
         }
 
-        // Create a README.md
-        let readme_content = format!(
-            "# {}\n\nA Theater actor created from the {} template.\n\n## Building\n\nTo build the actor:\n\n```bash\ncargo build --target wasm32-unknown-unknown --release\n```\n\n## Running\n\nTo run the actor with Theater:\n\n```bash\ntheater start manifest.toml\n```\n",
-            name, template_name
-        );
+        // Create a README.md with template-specific content
+        let readme_content = match template_name {
+            "basic" => format!(
+                "# {}\n\nA Theater actor created from the {} template.\n\n## Building\n\nTo build the actor:\n\n```bash\ncargo build --target wasm32-unknown-unknown --release\n```\n\n## Running\n\nTo run the actor with Theater:\n\n```bash\ntheater start manifest.toml\n```\n",
+                name, template_name
+            ),
+            "http" => format!(
+                "# {}\n\nA Theater HTTP server actor created from the {} template.\n\n## Features\n\n- HTTP server running on port 8080\n- REST API endpoints\n- WebSocket support\n\n## Building\n\nTo build the actor:\n\n```bash\ncargo build --target wasm32-unknown-unknown --release\n```\n\n## Running\n\nTo run the actor with Theater:\n\n```bash\ntheater start manifest.toml\n```\n\n## API Endpoints\n\n- GET / - Returns a simple HTML welcome page\n- GET /api/hello - Returns a JSON greeting message\n- WS /ws - WebSocket endpoint that echoes messages\n",
+                name, template_name
+            ),
+            _ => format!(
+                "# {}\n\nA Theater actor.\n",
+                name
+            ),
+        };
         fs::write(path.join("README.md"), readme_content)?;
 
         // Create a simple flake.nix

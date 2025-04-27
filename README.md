@@ -137,8 +137,34 @@ Retrieves the path to an actor or specific actor files.
 The Actor Registry supports several templates for new actors:
 
 - **basic**: A simple actor with message handling capabilities
-- **http**: An actor with HTTP server functionality
+- **http**: An actor with HTTP server functionality including REST API endpoints and WebSocket support
 - **supervisor**: An actor with supervisor capabilities for managing child actors
+
+### HTTP Template
+
+The HTTP template creates an actor with a fully functional HTTP server. Key features include:
+
+- HTTP server running on port 8080
+- Pre-configured API endpoints
+- WebSocket support with message handling
+- Simple routing system
+
+When using the HTTP template, the actor will expose these endpoints:
+
+- `GET /` - Serves a simple HTML welcome page
+- `GET /api/hello` - Returns a JSON greeting message
+- `WS /ws` - WebSocket endpoint that echoes messages
+
+Example of creating an HTTP actor:
+
+```json
+{
+  "name": "my-http-api",
+  "template": "http"
+}
+```
+
+After creation, you can customize the HTTP routes and handlers in the generated `lib.rs` file.
 
 ## Integrating with MCP Clients
 

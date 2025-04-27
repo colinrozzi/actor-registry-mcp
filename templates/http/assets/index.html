@@ -1,0 +1,55 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{actor_name}}</title>
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>Welcome to {{actor_name}}</h1>
+            <p class="subtitle">A Theater HTTP actor</p>
+        </header>
+        
+        <main>
+            <section class="card">
+                <h2>About This Actor</h2>
+                <p>This is a WebAssembly actor running in the Theater system. It provides HTTP and WebSocket capabilities.</p>
+            </section>
+            
+            <section class="card">
+                <h2>API Endpoints</h2>
+                <ul>
+                    <li><code>GET /</code> - This page</li>
+                    <li><code>GET /api/hello</code> - Returns a JSON greeting</li>
+                    <li><code>WS /ws</code> - WebSocket endpoint</li>
+                </ul>
+            </section>
+            
+            <section class="card">
+                <h2>WebSocket Demo</h2>
+                <div class="websocket-container">
+                    <div class="websocket-status">Disconnected</div>
+                    <button id="connect-btn">Connect</button>
+                    <div class="message-container">
+                        <input type="text" id="message-input" placeholder="Type a message...">
+                        <button id="send-btn" disabled>Send</button>
+                    </div>
+                    <div class="messages">
+                        <div class="messages-title">Messages:</div>
+                        <div id="messages-list"></div>
+                    </div>
+                </div>
+            </section>
+        </main>
+        
+        <footer>
+            <p>Powered by Theater | {{actor_name}} v1.0.0</p>
+        </footer>
+    </div>
+    
+    <script src="app.js"></script>
+</body>
+</html>

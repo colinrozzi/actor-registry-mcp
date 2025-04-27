@@ -119,8 +119,9 @@ impl Registry {
     }
 
     pub fn get_templates(&self) -> Vec<String> {
-        // For now, just return a static list of templates
-        // In the future, this would scan a templates directory
+        // Return available templates
+        // The "http" template is now fully implemented
+        // The "supervisor" template is listed but not yet fully implemented
         vec![
             "basic".to_string(),
             "http".to_string(),
