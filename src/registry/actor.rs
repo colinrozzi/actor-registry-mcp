@@ -295,7 +295,7 @@ impl Actor {
         fs::write(&status_file, "BUILDING").expect("Failed to write status file");
 
         // Execute nix build
-        let output = match Command::new("/nix/var/nix/profiles/default/bin/nix")
+        let mut output = match Command::new("/nix/var/nix/profiles/default/bin/nix")
             .args(["build", "--no-link", "--print-out-paths"])
             .current_dir(&self.path)
             .output()
@@ -346,6 +346,57 @@ impl Actor {
                 return Err(anyhow!("Failed to execute nix build command: {}", e));
             }
         };
+
+        // If build failed, try to get the full logs from nix-store
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+
+            info!("Nix build failed with stderr: {}", stderr);
+
+            // Try to extract the derivation path
+            if let Some(drv_path) = stderr
+                .lines()
+                .find(|line| line.contains("nix-store -l"))
+                .and_then(|line| {
+                    let parts: Vec<&str> = line.split('\'').collect();
+                    if parts.len() >= 2 {
+                        Some(
+                            parts[1]
+                                .trim()
+                                .strip_prefix("nix-store -l ")
+                                .unwrap_or(parts[1])
+                                .trim(),
+                        )
+                    } else {
+                        None
+                    }
+                })
+            {
+                // Run nix-store -l to get the full build logs
+                debug!("Getting full logs from: {}", drv_path);
+                let full_logs = Command::new("/nix/var/nix/profiles/default/bin/nix-store")
+                    .args(["-l", drv_path])
+                    .output();
+
+                debug!("Full logs output: {:?}", full_logs);
+
+                if let Ok(log_output) = full_logs {
+                    if log_output.status.success() {
+                        // Use the full logs instead of the truncated output
+                        let full_stderr = String::from_utf8_lossy(&log_output.stdout);
+
+                        // Combine the original stderr (which has the error summary) with the full logs
+                        let combined_output = format!(
+                            "=== Error Summary ===\n{}\n\n=== Full Build Logs ===\n{}",
+                            stderr, full_stderr
+                        );
+
+                        // Replace the original stderr
+                        output.stderr = combined_output.into_bytes();
+                    }
+                }
+            }
+        }
 
         // Function to update build info
         let update_build_info = |status: BuildStatus, wasm_path: Option<&str>| -> Result<()> {
