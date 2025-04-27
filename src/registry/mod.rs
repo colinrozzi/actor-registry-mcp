@@ -1,7 +1,7 @@
 pub mod actor;
 pub mod config;
 
-use anyhow::{anyhow, Context, Result};
+use anyhow::{anyhow, Result};
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 use tracing::{debug, error, info, warn};
@@ -9,6 +9,7 @@ use walkdir::WalkDir;
 
 use self::actor::Actor;
 use self::config::RegistryConfig;
+use crate::templates::TemplateManager;
 
 #[derive(Clone)]
 pub struct Registry {
@@ -99,7 +100,7 @@ impl Registry {
         Actor::create(name, actor_path, template)
     }
 
-    pub fn build_actor(&self, name: &str, release: bool) -> Result<()> {
+    pub fn build_actor(&self, name: &str, _release: bool) -> Result<()> {
         match self.find_actor(name) {
             Ok(actor) => {
                 // Note: release parameter is ignored for now as actor.build() doesn't use it yet
@@ -119,14 +120,8 @@ impl Registry {
     }
 
     pub fn get_templates(&self) -> Vec<String> {
-        // Return available templates
-        // The "http" template is now fully implemented
-        // The "supervisor" template is listed but not yet fully implemented
-        vec![
-            "basic".to_string(),
-            "http".to_string(),
-            "supervisor".to_string(),
-        ]
+        // Use the TemplateManager to get the available templates
+        TemplateManager::list_templates()
     }
 
     pub fn get_available_interfaces(&self) -> Vec<String> {
@@ -140,4 +135,3 @@ impl Registry {
         ]
     }
 }
-

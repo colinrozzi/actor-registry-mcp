@@ -1,0 +1,51 @@
+pub const FLAKE_NIX: &str = r#"# This is a minimal flake.nix for building {{actor_name}}
+{
+  description = "{{actor_name}} - A Theater actor";
+
+  inputs = {
+    nixpkgs.url = "github:NixOS/nixpkgs/nixos-unstable";
+    rust-overlay.url = "github:oxalica/rust-overlay";
+    flake-utils.url = "github:numtide/flake-utils";
+  };
+
+  outputs = { self, nixpkgs, rust-overlay, flake-utils }:
+    flake-utils.lib.eachDefaultSystem (system:
+      let
+        overlays = [ (import rust-overlay) ];
+        pkgs = import nixpkgs { inherit system overlays; };
+        
+        rustToolchain = pkgs.rust-bin.stable.latest.default.override {
+          extensions = [ "rust-src" ];
+          targets = [ "wasm32-unknown-unknown" ];
+        };
+      in
+      {
+        devShells.default = pkgs.mkShell {
+          buildInputs = with pkgs; [
+            rustToolchain
+            pkg-config
+            openssl
+            wasm-tools
+          ];
+        };
+
+        packages.default = pkgs.stdenv.mkDerivation {
+          pname = "{{actor_name}}";
+          version = "0.1.0";
+          src = ./.;
+
+          nativeBuildInputs = [ rustToolchain pkgs.wasm-tools ];
+          
+          buildPhase = ''
+            # Build the WebAssembly component
+            cargo build --release --target wasm32-unknown-unknown
+          '';
+
+          installPhase = ''
+            mkdir -p $out/lib
+            cp target/wasm32-unknown-unknown/release/{{actor_name}}.wasm $out/lib/
+          '';
+        };
+      });
+}
+"#;
