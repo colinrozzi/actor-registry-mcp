@@ -13,6 +13,7 @@ The Theater Actor Registry MCP Server provides tools for creating, managing, and
 - **Build actors**: Build actors using Nix flakes or Cargo
 - **Get actor info**: Retrieve detailed information about specific actors
 - **Get actor paths**: Find the path to specific actor files
+- **Generate bindings**: Generate Rust bindings from an actor's WIT definitions
 
 ## Installation
 
@@ -131,6 +132,28 @@ Retrieves the path to an actor or specific actor files.
   "absolute": true
 }
 ```
+
+### generate-bindings
+
+Generates Rust bindings from an actor's WIT definitions.
+
+**Parameters:**
+- `name`: Name of the actor to generate bindings for (required)
+
+**Example:**
+```json
+{
+  "name": "my-actor"
+}
+```
+
+This tool will:
+1. Find the specified actor in the registry
+2. Create a 'bindings' directory in the actor's folder if it doesn't exist
+3. Run `cargo component bindings` with the appropriate parameters to generate Rust bindings
+4. Output the result of the binding generation process
+
+The generated bindings will be placed in the `<actor-directory>/bindings/` folder.
 
 ## Templates
 

@@ -3,3 +3,4 @@ pub mod list_actors;
 pub mod build_actor;
 pub mod get_actor_info;
 pub mod get_actor_path;
+pub mod generate_bindings;
