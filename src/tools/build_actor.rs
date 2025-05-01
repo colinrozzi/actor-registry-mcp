@@ -48,8 +48,8 @@ pub fn register_build_actor_tool(
                                     
                                     let content = vec![
                                         ToolContent::Text {
-                                            text: format!("Actor '{}' successfully built.\nComponent path: {}\nBuild log: {:?}", 
-                                                         name, component_path ,updated_actor.build_info.build_log)
+                                            text: format!("Actor '{}' successfully built.\nComponent path: {}\nCheck .build_info for logs", 
+                                                         name, component_path)
                                         }
                                     ];
                                     
@@ -62,7 +62,7 @@ pub fn register_build_actor_tool(
                                     warn!("Build succeeded but failed to reload actor info: {}", e);
                                     let content = vec![
                                         ToolContent::Text {
-                                            text: format!("Actor '{}' successfully built, but failed to reload actor info: {}", name, e)
+                                            text: format!("Actor '{}' successfully built, but failed to reload actor info: {}\nCheck .build_info for logs", name, e)
                                         }
                                     ];
                                     
@@ -97,7 +97,7 @@ pub fn register_build_actor_tool(
                             
                             let content = vec![
                                 ToolContent::Text {
-                                    text: format!("Failed to build actor: {}{}", e, additional_info)
+                                    text: format!("Failed to build actor: {}{}\nCheck .build_info for logs", e, additional_info)
                                 }
                             ];
                             
@@ -112,7 +112,7 @@ pub fn register_build_actor_tool(
                     error!("Failed to find actor for build: {}", e);
                     let content = vec![
                         ToolContent::Text {
-                            text: format!("Failed to find actor: {}", e)
+                            text: format!("Failed to find actor: {}\nCheck .build_info for logs", e)
                         }
                     ];
                     
