@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
 use tracing::{debug, error, info};
 

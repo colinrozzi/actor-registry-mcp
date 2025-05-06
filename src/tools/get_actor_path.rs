@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
 use std::path::PathBuf;
 use tracing::{debug, error, info};
@@ -58,4 +58,3 @@ pub fn register_get_actor_path_tool(builder: ServerBuilder, registry: Registry) 
         },
     )
 }
-

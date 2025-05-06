@@ -1,9 +1,8 @@
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
 use tracing::{debug, error, warn};
 use anyhow::anyhow;
-use std::time::UNIX_EPOCH;
 
 use crate::registry::Registry;
 
@@ -13,7 +12,7 @@ pub fn register_build_actor_tool(
 ) -> ServerBuilder {
     builder.with_tool(
         "build-actor",
-        Some("Builds an actor using nix flakes and validates the output"),
+        Some("Builds an actor using its flake and updates its manifest"),
         json!({
             "type": "object",
             "properties": {

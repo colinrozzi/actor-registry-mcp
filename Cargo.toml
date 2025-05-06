@@ -4,8 +4,8 @@ version = "0.1.0"
 edition = "2021"
 
 [dependencies]
-mcp-protocol = { path = "../../rust-mcp/mcp-protocol" }
-mcp-server = { path = "../../rust-mcp/mcp-server" }
+mcp-protocol = "0.2.1"
+modelcontextprotocol-server = "0.1.0"
 theater = { path = "../../theater" }
 anyhow = "1.0"
 serde = { version = "1.0", features = ["derive"] }
@@ -17,5 +17,3 @@ walkdir = "2.4"
 toml = "0.8"
 regex = "1.10"
 chrono = "0.4"
-# Replaced nix-cmd with std::process for executing commands
-# nix-cmd = "0.6"

@@ -1,5 +1,5 @@
 use anyhow::Result;
-use mcp_server::{transport::StdioTransport, ServerBuilder};
+use modelcontextprotocol_server::{transport::StdioTransport, ServerBuilder};
 use std::env;
 use std::fs::OpenOptions;
 use std::io;
@@ -18,8 +18,9 @@ mod utils;
 
 use tools::{
     build_actor::register_build_actor_tool, create_actor::register_create_actor_tool,
-    generate_bindings::register_generate_bindings_tool, get_actor_info::register_get_actor_info_tool,
-    get_actor_path::register_get_actor_path_tool, list_actors::register_list_actors_tool,
+    generate_bindings::register_generate_bindings_tool,
+    get_actor_info::register_get_actor_info_tool, get_actor_path::register_get_actor_path_tool,
+    list_actors::register_list_actors_tool,
 };
 
 #[tokio::main]
