@@ -1,19 +1,17 @@
+use anyhow::{anyhow, Result};
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
-use tracing::{debug, error, warn};
-use anyhow::anyhow;
-use std::time::UNIX_EPOCH;
+
+use std::process::Command;
+use tracing::{debug, error, info};
 
 use crate::registry::Registry;
 
-pub fn register_build_actor_tool(
-    builder: ServerBuilder,
-    registry: Registry
-) -> ServerBuilder {
+pub fn register_build_actor_tool(builder: ServerBuilder, registry: Registry) -> ServerBuilder {
     builder.with_tool(
         "build-actor",
-        Some("Builds an actor using nix flakes and validates the output"),
+        Some("Builds an actor using its flake and updates its manifest"),
         json!({
             "type": "object",
             "properties": {
@@ -21,107 +19,125 @@ pub fn register_build_actor_tool(
                     "type": "string",
                     "description": "Name of the actor (required)"
                 },
+                "release": {
+                    "type": "boolean",
+                    "description": "Build in release mode (optional)"
+                },
+                "clean": {
+                    "type": "boolean",
+                    "description": "Clean the target directory before building (optional)"
+                },
+                "force": {
+                    "type": "boolean",
+                    "description": "Force rebuild even if the component is up to date (optional)"
+                },
+                "verbose": {
+                    "type": "boolean",
+                    "description": "Turn on verbose output (optional)"
+                }
             },
             "required": ["name"]
         }),
         move |args| {
-            let name = args.get("name")
+            let name = args
+                .get("name")
                 .and_then(|v| v.as_str())
                 .ok_or_else(|| anyhow!("Missing required parameter: name"))?;
-            
+
             debug!("Building actor '{}'", name);
-            
-            // First, find the actor
+
+            // First, find the actor to get its path
             match registry.find_actor(name) {
                 Ok(actor) => {
-                    // Perform build
-                    match actor.build() {
-                        Ok(()) => {
-                            // Reload the actor to get updated build info
-                            match Registry::new(registry.path())?.find_actor(name) {
-                                Ok(updated_actor) => {
-                                    // Get component path from the updated actor
-                                    let component_path = updated_actor.manifest
-                                        .as_ref()
-                                        .map(|m| m.component_path.clone())
-                                        .unwrap_or_else(|| "Unknown".to_string());
-                                    
-                                    let content = vec![
-                                        ToolContent::Text {
-                                            text: format!("Actor '{}' successfully built.\nComponent path: {}\nBuild log: {:?}", 
-                                                         name, component_path ,updated_actor.build_info.build_log)
-                                        }
-                                    ];
-                                    
-                                    Ok(ToolCallResult {
-                                        content,
-                                        is_error: Some(false)
-                                    })
-                                },
-                                Err(e) => {
-                                    warn!("Build succeeded but failed to reload actor info: {}", e);
-                                    let content = vec![
-                                        ToolContent::Text {
-                                            text: format!("Actor '{}' successfully built, but failed to reload actor info: {}", name, e)
-                                        }
-                                    ];
-                                    
-                                    Ok(ToolCallResult {
-                                        content,
-                                        is_error: Some(false)
-                                    })
-                                }
+                    // Prepare the theater build command with optional arguments
+                    let mut cmd = Command::new("theater");
+                    cmd.arg("build");
+
+                    // Add optional flags
+                    if args
+                        .get("release")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
+                        cmd.arg("--release");
+                    }
+                    if args.get("clean").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        cmd.arg("--clean");
+                    }
+                    if args.get("force").and_then(|v| v.as_bool()).unwrap_or(false) {
+                        cmd.arg("--force");
+                    }
+                    if args
+                        .get("verbose")
+                        .and_then(|v| v.as_bool())
+                        .unwrap_or(false)
+                    {
+                        cmd.arg("--verbose");
+                    }
+
+                    // Add the actor path as the final argument
+                    cmd.arg(&actor.path);
+
+                    // Execute the command
+                    info!("Executing: {:?}", cmd);
+                    match cmd.output() {
+                        Ok(output) => {
+                            let stdout = String::from_utf8_lossy(&output.stdout).to_string();
+                            let stderr = String::from_utf8_lossy(&output.stderr).to_string();
+
+                            if output.status.success() {
+                                info!("Successfully built actor '{}'", name);
+                                let content = vec![ToolContent::Text {
+                                    text: format!(
+                                        "Actor '{}' successfully built.\n\nOutput:\n{}\n{}",
+                                        name, stdout, stderr
+                                    ),
+                                }];
+
+                                Ok(ToolCallResult {
+                                    content,
+                                    is_error: Some(false),
+                                })
+                            } else {
+                                error!("Failed to build actor '{}': {}", name, stderr);
+                                let content = vec![ToolContent::Text {
+                                    text: format!(
+                                        "Failed to build actor '{}':\n\nOutput:\n{}\n\nError:\n{}",
+                                        name, stdout, stderr
+                                    ),
+                                }];
+
+                                Ok(ToolCallResult {
+                                    content,
+                                    is_error: Some(true),
+                                })
                             }
-                        },
+                        }
                         Err(e) => {
-                            error!("Failed to build actor: {}", e);
-                            
-                            // Try to get build info anyway to provide more details to the user
-                            let additional_info = match Registry::new(registry.path()) {
-                                Ok(reg) => match reg.find_actor(name) {
-                                    Ok(actor) => {
-                                        let build_log = actor.build_info.build_log
-                                            .map(|log| format!("\nBuild log: {}", log))
-                                            .unwrap_or_default();
-                                            
-                                        let error_msg = actor.build_info.error_message
-                                            .map(|msg| format!("\nError message: {}", msg))
-                                            .unwrap_or_default();
-                                            
-                                        format!("{}{}", build_log, error_msg)
-                                    },
-                                    Err(_) => String::new()
-                                },
-                                Err(_) => String::new()
-                            };
-                            
-                            let content = vec![
-                                ToolContent::Text {
-                                    text: format!("Failed to build actor: {}{}", e, additional_info)
-                                }
-                            ];
-                            
+                            error!("Failed to execute theater build command: {}", e);
+                            let content = vec![ToolContent::Text {
+                                text: format!("Failed to execute theater build command: {}", e),
+                            }];
+
                             Ok(ToolCallResult {
                                 content,
-                                is_error: Some(true)
+                                is_error: Some(true),
                             })
                         }
                     }
-                },
+                }
                 Err(e) => {
-                    error!("Failed to find actor for build: {}", e);
-                    let content = vec![
-                        ToolContent::Text {
-                            text: format!("Failed to find actor: {}", e)
-                        }
-                    ];
-                    
+                    error!("Failed to find actor '{}' for building: {}", name, e);
+                    let content = vec![ToolContent::Text {
+                        text: format!("Failed to find actor '{}': {}", name, e),
+                    }];
+
                     Ok(ToolCallResult {
                         content,
-                        is_error: Some(true)
+                        is_error: Some(true),
                     })
                 }
             }
-        }
+        },
     )
 }

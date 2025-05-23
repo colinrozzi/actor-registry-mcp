@@ -128,7 +128,7 @@ impl Actor {
         // For now, we use a simple build status check
         // In the future, this would be stored in a build_info.json file
         let build_status = if let Some(m) = &manifest {
-            let component_path = &m.component_path;
+            let component_path = &m.component;
             if !component_path.is_empty() && Path::new(component_path).exists() {
                 BuildStatus::Success
             } else {
@@ -176,13 +176,16 @@ impl Actor {
         // Create manifest.toml using Theater's ManifestConfig structure
         let manifest = ManifestConfig {
             name: name.to_string(),
-            component_path: String::new(), // Empty string for now, will be updated after build
-            short_description: Some(format!(
+            version: "0.1.0".to_string(),
+            component: String::new(), // Empty string for now, will be updated after build
+            description: Some(format!(
                 "A Theater actor created from the {} template.",
                 template_name
             )),
+
             long_description: None,
             init_state: None,
+            save_chain: Some(true),
             handlers: vec![HandlerConfig::Runtime(RuntimeHostConfig {})],
         };
 
@@ -268,6 +271,8 @@ impl Actor {
         Self::from_path(path)
     }
 
+    // This method is no longer used as we now use the `theater build` command directly
+    // It is kept for reference or potential future use
     pub fn build(&self) -> Result<()> {
         debug!("Building actor '{}'", self.name);
 
@@ -290,8 +295,8 @@ impl Actor {
         fs::write(&status_file, "BUILDING").expect("Failed to write status file");
 
         // Execute nix build
-        let output = match Command::new("/nix/var/nix/profiles/default/bin/nix")
-            .args(["build", "--no-link", "--print-out-paths"])
+        let output = match Command::new("/Users/colinrozzi/.cargo/bin/theater")
+            .args(["build"])
             .current_dir(&self.path)
             .output()
         {
@@ -467,7 +472,7 @@ impl Actor {
 
         // Update the manifest.toml with the new component path
         if let Some(mut manifest) = self.manifest.clone() {
-            manifest.component_path = wasm_path.clone();
+            manifest.component = wasm_path.clone();
 
             match toml::to_string(&manifest) {
                 Ok(manifest_content) => {

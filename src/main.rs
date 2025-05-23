@@ -1,5 +1,5 @@
 use anyhow::Result;
-use mcp_server::{transport::StdioTransport, ServerBuilder};
+use modelcontextprotocol_server::{transport::StdioTransport, ServerBuilder};
 use std::env;
 use std::fs::OpenOptions;
 use std::io;
@@ -86,4 +86,3 @@ async fn main() -> Result<()> {
 
     Ok(())
 }
-

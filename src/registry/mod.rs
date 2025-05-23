@@ -99,24 +99,7 @@ impl Registry {
         Actor::create(name, actor_path, template)
     }
 
-    pub fn build_actor(&self, name: &str, release: bool) -> Result<()> {
-        match self.find_actor(name) {
-            Ok(actor) => {
-                // Note: release parameter is ignored for now as actor.build() doesn't use it yet
-                match actor.build() {
-                    Ok(()) => Ok(()),
-                    Err(e) => {
-                        error!("Build failed for actor '{}': {}", name, e);
-                        Err(e)
-                    }
-                }
-            },
-            Err(e) => {
-                error!("Failed to find actor '{}' for building: {}", name, e);
-                Err(e)
-            }
-        }
-    }
+    // Note: build_actor method has been removed since we now use the `theater build` command directly in the tool implementation
 
     pub fn get_templates(&self) -> Vec<String> {
         // For now, just return a static list of templates

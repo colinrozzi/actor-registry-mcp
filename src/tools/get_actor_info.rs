@@ -1,6 +1,6 @@
 use anyhow::{anyhow, Result};
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
 use std::fs;
 use tracing::{debug, error, info};
@@ -40,11 +40,8 @@ pub fn register_get_actor_info_tool(builder: ServerBuilder, registry: Registry) 
 
                         text.push_str("\n## Interfaces\n\n");
 
-                        if !manifest.component_path.is_empty() {
-                            text.push_str(&format!(
-                                "\nComponent path: {}\n",
-                                manifest.component_path
-                            ));
+                        if !manifest.component.is_empty() {
+                            text.push_str(&format!("\nComponent path: {}\n", manifest.component));
                         }
                     }
 

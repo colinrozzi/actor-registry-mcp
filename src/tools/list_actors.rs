@@ -1,5 +1,5 @@
 use mcp_protocol::types::tool::{ToolCallResult, ToolContent};
-use mcp_server::ServerBuilder;
+use modelcontextprotocol_server::ServerBuilder;
 use serde_json::json;
 use tracing::{debug, error};
 
@@ -57,4 +57,3 @@ pub fn register_list_actors_tool(builder: ServerBuilder, registry: Registry) -> 
         },
     )
 }
-
